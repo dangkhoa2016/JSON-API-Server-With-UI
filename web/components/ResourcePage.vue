@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, useSlots } from 'vue'
+import { ref, computed, useSlots, type Component } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import ResourceTable from '@/components/ResourceTable.vue'
-import { Plus, Search, Loader2 } from '@lucide/vue'
+import ResourceSearch from '@/components/ResourceSearch.vue'
+import { Plus, Loader2 } from '@lucide/vue'
 
 interface Field {
   key: string
@@ -14,46 +15,86 @@ interface Field {
   required?: boolean
 }
 
+interface ResourceItem {
+  id: number;
+  [key: string]: unknown;
+}
+
 const props = defineProps<{
   title: string
   fields: Field[]
-  items?: any[]
+  items?: ResourceItem[]
   total: number
   page: number
   perPage: number
   isLoading: boolean
   isCreating: boolean
   isUpdating: boolean
-  icon?: any
+  icon?: Component
 }>()
 
 const emit = defineEmits<{
-  create: [data: Record<string, any>]
-  update: [id: number, data: Record<string, any>]
+  create: [data: Record<string, unknown>]
+  update: [id: number, data: Record<string, unknown>]
   delete: [id: number]
   'update:page': [page: number]
+  'update:searchMode': [mode: 'client' | 'server']
+  'update:sort': [field: string | undefined, order: 'asc' | 'desc']
+  search: [query: string]
 }>()
 
 const slots = useSlots()
 
 const search = ref('')
+const searchMode = ref<'client' | 'server'>('client')
+const sortField = ref<string | undefined>(undefined)
+const sortOrder = ref<'asc' | 'desc'>('asc')
 const isCreateOpen = ref(false)
 const editingId = ref<number | null>(null)
 const pendingDeleteId = ref<number | null>(null)
 const deleteConfirmOpen = ref(false)
-const formData = ref<Record<string, any>>({})
+const formData = ref<Record<string, unknown>>({})
+const validationErrors = ref<Record<string, string>>({})
+
+function validateForm(): boolean {
+  const errors: Record<string, string> = {}
+  for (const field of props.fields) {
+    if (!field.required) continue
+    const value = formData.value[field.key]
+    if (field.type === 'boolean') continue
+    if (field.type === 'number') {
+      if (value === '' || value === null || value === undefined || isNaN(Number(value))) {
+        errors[field.key] = `${field.label} is required`
+      }
+    } else if (!value || String(value).trim() === '') {
+      errors[field.key] = `${field.label} is required`
+    }
+  }
+  validationErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+function openCreate() {
+  validationErrors.value = {}
+  formData.value = {}
+  isCreateOpen.value = true
+}
 
 function handleCreate() {
+  if (!validateForm()) return
   emit('create', { ...formData.value })
   isCreateOpen.value = false
   formData.value = {}
+  validationErrors.value = {}
 }
 
 function handleUpdate() {
   if (!editingId.value) return
+  if (!validateForm()) return
   emit('update', editingId.value, { ...formData.value })
   editingId.value = null
   formData.value = {}
+  validationErrors.value = {}
 }
 
 function handleDelete(id: number) {
@@ -68,16 +109,17 @@ function confirmDelete() {
   }
 }
 
-function openEdit(item: any) {
+function openEdit(item: ResourceItem) {
+  validationErrors.value = {}
   editingId.value = item.id
-  const editData: Record<string, any> = {}
+  const editData: Record<string, unknown> = {}
   props.fields.forEach((f) => {
     if (item[f.key] !== undefined) editData[f.key] = item[f.key]
   })
   formData.value = editData
 }
 
-function setFormField(key: string, value: any) {
+function setFormField(key: string, value: unknown) {
   formData.value = { ...formData.value, [key]: value }
 }
 
@@ -86,22 +128,56 @@ function hasCustomSlot(key: string): boolean {
 }
 
 function goToPage(p: number) {
-  if (p < 1 || p > totalPages.value) return
+  const max = Math.max(1, Math.ceil(props.total / props.perPage))
+  if (p < 1 || p > max) return
   emit('update:page', p)
 }
 
-const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.perPage)))
+function localSort(items: ResourceItem[]): ResourceItem[] {
+  if (!sortField.value) return items
+  return [...items].sort((a, b) => {
+    const aVal = a[sortField.value!]
+    const bVal = b[sortField.value!]
+    if (aVal == null) return 1
+    if (bVal == null) return -1
+    const cmp = typeof aVal === 'number' && typeof bVal === 'number'
+      ? aVal - bVal
+      : String(aVal).localeCompare(String(bVal))
+    return sortOrder.value === 'asc' ? cmp : -cmp
+  })
+}
 
-const filteredItems = computed(() => {
+const sortedItems = computed(() => {
   if (!props.items) return []
-  return props.items.filter((item: any) =>
+  if (searchMode.value === 'server') {
+    return localSort(props.items)
+  }
+  const filtered = props.items.filter((item: ResourceItem) =>
     props.fields.some((f) =>
       String(item[f.key] || '')
         .toLowerCase()
         .includes(search.value.toLowerCase()),
     ),
   )
+  return localSort(filtered)
 })
+
+function onSearchModeChange(mode: 'client' | 'server') {
+  searchMode.value = mode
+  emit('update:searchMode', mode)
+}
+
+function onSearch(query: string) {
+  if (searchMode.value === 'server') {
+    emit('search', query)
+  }
+}
+
+function onSort(field: string | undefined, order: 'asc' | 'desc') {
+  sortField.value = field
+  sortOrder.value = order
+  emit('update:sort', field, order)
+}
 </script>
 
 <template>
@@ -117,22 +193,20 @@ const filteredItems = computed(() => {
           </p>
         </div>
       </div>
-      <Button @click="isCreateOpen = true">
+      <Button @click="openCreate">
         <Plus class="w-4 h-4 mr-2" />
         Add {{ title }}
       </Button>
     </div>
 
     <!-- Search -->
-    <div class="relative">
-      <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-      <Input
-        :model-value="search"
-        @update:model-value="search = $event"
-        :placeholder="`Search current page...`"
-        class="pl-10 max-w-md"
-      />
-    </div>
+    <ResourceSearch
+      :model-value="search"
+      :search-mode="searchMode"
+      @update:model-value="search = $event"
+      @update:search-mode="onSearchModeChange"
+      @search="onSearch"
+    />
 
     <!-- Create Dialog -->
     <Dialog v-model="isCreateOpen">
@@ -148,7 +222,7 @@ const filteredItems = computed(() => {
             v-if="hasCustomSlot(field.key)"
             :name="`field-${field.key}`"
             :value="formData[field.key]"
-            :update="(v: any) => setFormField(field.key, v)"
+            :update="(v: unknown) => setFormField(field.key, v)"
           />
 
           <textarea
@@ -175,11 +249,15 @@ const filteredItems = computed(() => {
             :model-value="formData[field.key] || ''"
             @update:model-value="setFormField(field.key, $event)"
           />
+          <p v-if="validationErrors[field.key]" class="text-sm text-red-500 mt-1">{{ validationErrors[field.key] }}</p>
         </div>
-        <Button :disabled="isCreating" class="mt-4" @click="handleCreate">
-          <Loader2 v-if="isCreating" class="w-4 h-4 mr-2 animate-spin" />
-          Create
-        </Button>
+        <div class="flex justify-end gap-3 pt-2">
+          <Button variant="outline" @click="isCreateOpen = false">Cancel</Button>
+          <Button :disabled="isCreating" @click="handleCreate">
+            <Loader2 v-if="isCreating" class="w-4 h-4 animate-spin" />
+            Create
+          </Button>
+        </div>
       </div>
     </Dialog>
 
@@ -197,7 +275,7 @@ const filteredItems = computed(() => {
             v-if="hasCustomSlot(field.key)"
             :name="`field-${field.key}`"
             :value="formData[field.key]"
-            :update="(v: any) => setFormField(field.key, v)"
+            :update="(v: unknown) => setFormField(field.key, v)"
           />
 
           <textarea
@@ -224,11 +302,15 @@ const filteredItems = computed(() => {
             :model-value="formData[field.key] || ''"
             @update:model-value="setFormField(field.key, $event)"
           />
+          <p v-if="validationErrors[field.key]" class="text-sm text-red-500 mt-1">{{ validationErrors[field.key] }}</p>
         </div>
-        <Button :disabled="isUpdating" class="mt-4" @click="handleUpdate">
-          <Loader2 v-if="isUpdating" class="w-4 h-4 mr-2 animate-spin" />
-          Update
-        </Button>
+        <div class="flex justify-end gap-3 pt-2">
+          <Button variant="outline" @click="editingId = null">Cancel</Button>
+          <Button :disabled="isUpdating" @click="handleUpdate">
+            <Loader2 v-if="isUpdating" class="w-4 h-4 animate-spin" />
+            Update
+          </Button>
+        </div>
       </div>
     </Dialog>
 
@@ -248,15 +330,18 @@ const filteredItems = computed(() => {
 
     <ResourceTable
       :fields="fields"
-      :items="filteredItems"
+      :items="sortedItems"
       :is-loading="isLoading"
       :title="title"
       :page="page"
       :total="total"
       :per-page="perPage"
+      :sort-field="sortField"
+      :sort-order="sortOrder"
       @edit="openEdit"
       @delete="handleDelete"
       @update:page="goToPage"
+      @update:sort="onSort"
     />
   </div>
 </template>

@@ -9,7 +9,7 @@ const fields = [
   { key: 'userId', label: 'User ID', type: 'number' as const, required: true },
 ]
 
-const { list, create, update, handleCreate, handleUpdate, handleDelete, page, perPage } = useResourceCrud('todos')
+const { list, create, update, handleCreate, handleUpdate, handleDelete, handleSearch, handleSort, page, perPage } = useResourceCrud('todos')
 </script>
 
 <template>
@@ -27,5 +27,7 @@ const { list, create, update, handleCreate, handleUpdate, handleDelete, page, pe
     @create="handleCreate"
     @update="handleUpdate"
     @delete="handleDelete"
+    @search="handleSearch"
+    @update:sort="handleSort"
   />
 </template>

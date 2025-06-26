@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, useSlots } from 'vue'
-import { Pencil, Trash2, Inbox, ChevronLeft, ChevronRight } from '@lucide/vue'
+import { Pencil, Trash2, Inbox, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from '@lucide/vue'
 
 interface Field {
   key: string
@@ -17,12 +17,15 @@ const props = defineProps<{
   page: number
   total: number
   perPage: number
+  sortField?: string
+  sortOrder?: 'asc' | 'desc'
 }>()
 
 const emit = defineEmits<{
   edit: [item: any]
   delete: [id: number]
   'update:page': [page: number]
+  'update:sort': [field: string, order: 'asc' | 'desc']
 }>()
 
 const slots = useSlots()
@@ -45,6 +48,20 @@ const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.perP
 
 const startRow = computed(() => (props.page - 1) * props.perPage + 1)
 const endRow = computed(() => Math.min(props.page * props.perPage, props.total))
+
+function handleSort(field: string) {
+  if (props.sortField === field) {
+    const newOrder = props.sortOrder === 'asc' ? 'desc' : 'asc'
+    emit('update:sort', field, newOrder)
+  } else {
+    emit('update:sort', field, 'asc')
+  }
+}
+
+function sortIcon(field: string) {
+  if (props.sortField !== field) return ArrowUpDown
+  return props.sortOrder === 'asc' ? ArrowUp : ArrowDown
+}
 
 function goToPage(p: number) {
   if (p < 1 || p > totalPages.value || p === props.page) return
@@ -108,14 +125,26 @@ const visiblePages = computed(() => {
       <table class="w-full caption-bottom text-sm">
         <thead>
           <tr class="border-b border-gray-200 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/50">
-            <th class="h-11 px-5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 w-16">ID</th>
             <th
-              v-for="f in displayFields"
-              :key="f.key"
-              class="h-11 px-5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+              class="h-11 px-5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 w-16 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-150"
+              @click="handleSort('id')"
             >
-              {{ f.label }}
+              <div class="inline-flex items-center gap-1">
+                ID
+                <component :is="sortIcon('id')" class="size-3.5" />
+              </div>
             </th>
+              <th
+                v-for="f in displayFields"
+                :key="f.key"
+                class="h-11 px-5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-150"
+                @click="handleSort(f.key)"
+              >
+                <div class="inline-flex items-center gap-1">
+                  {{ f.label }}
+                  <component :is="sortIcon(f.key)" class="size-3.5" />
+                </div>
+              </th>
             <th class="h-11 px-5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 w-24">Actions</th>
           </tr>
         </thead>

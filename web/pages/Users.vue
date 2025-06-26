@@ -21,14 +21,17 @@ const fields = [
 const title = 'Users'
 const page = ref(1)
 const perPage = 25
+const searchQuery = ref<string | undefined>(undefined)
+const sortField = ref<string | undefined>(undefined)
+const sortOrder = ref<'asc' | 'desc'>('asc')
 
 const list = trpc.json.users.list.useQuery(
-  { filters: {}, limit: perPage, page },
+  { filters: {}, limit: perPage, page, q: searchQuery, sort: sortField, order: sortOrder },
   {
     /* v8 ignore next */
     placeholderData: (prev) => prev,
     /* v8 ignore next */
-    queryKey: computed(() => [{ subsystem: "trpc", path: "json.users.list", page: page.value, filters: {} }]),
+    queryKey: computed(() => [{ subsystem: "trpc", path: "json.users.list", page: page.value, filters: {}, q: searchQuery.value, sort: sortField.value, order: sortOrder.value }]),
   },
 )
 const create = trpc.json.users.create.useMutation()
@@ -69,6 +72,16 @@ function handleDelete(id: number) {
       toast.error('Failed', { description: err.message })
     },
   })
+}
+
+function handleSearch(q: string) {
+  searchQuery.value = q || undefined
+  page.value = 1
+}
+
+function handleSort(field: string | undefined, order: 'asc' | 'desc') {
+  sortField.value = field
+  sortOrder.value = order
 }
 
 const formattedItems = computed(() => {
@@ -177,6 +190,8 @@ function setComp(field: string, e: Event) {
     @create="handleCreate"
     @update="handleUpdate"
     @delete="handleDelete"
+    @search="handleSearch"
+    @update:sort="handleSort"
   >
     <template #field-address="{ value, update }">
       <div class="flex items-center gap-2 mt-1">

@@ -10,7 +10,7 @@ const fields = [
   { key: 'albumId', label: 'Album ID', type: 'number' as const, required: true },
 ]
 
-const { list, create, update, handleCreate, handleUpdate, handleDelete, page, perPage } = useResourceCrud('photos')
+const { list, create, update, handleCreate, handleUpdate, handleDelete, handleSearch, handleSort, page, perPage } = useResourceCrud('photos')
 </script>
 
 <template>
@@ -28,5 +28,7 @@ const { list, create, update, handleCreate, handleUpdate, handleDelete, page, pe
     @create="handleCreate"
     @update="handleUpdate"
     @delete="handleDelete"
+    @search="handleSearch"
+    @update:sort="handleSort"
   />
 </template>

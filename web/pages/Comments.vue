@@ -10,7 +10,7 @@ const fields = [
   { key: 'postId', label: 'Post ID', type: 'number' as const, required: true },
 ]
 
-const { list, create, update, handleCreate, handleUpdate, handleDelete, page, perPage } = useResourceCrud('comments')
+const { list, create, update, handleCreate, handleUpdate, handleDelete, handleSearch, handleSort, page, perPage } = useResourceCrud('comments')
 </script>
 
 <template>
@@ -28,5 +28,7 @@ const { list, create, update, handleCreate, handleUpdate, handleDelete, page, pe
     @create="handleCreate"
     @update="handleUpdate"
     @delete="handleDelete"
+    @search="handleSearch"
+    @update:sort="handleSort"
   />
 </template>

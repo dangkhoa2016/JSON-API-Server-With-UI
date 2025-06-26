@@ -18,12 +18,15 @@ export function useResourceCrud(resource: ResourceName, opts?: { perPage?: numbe
 
   const page = ref(1)
   const perPage = opts?.perPage ?? 25
+  const searchQuery = ref<string | undefined>(undefined)
+  const sortField = ref<string | undefined>(undefined)
+  const sortOrder = ref<'asc' | 'desc'>('asc')
 
   const list = api.list.useQuery(
-    { filters: {}, limit: perPage, page },
+    { filters: {}, limit: perPage, page, q: searchQuery, sort: sortField, order: sortOrder },
     {
       placeholderData: (prev: any) => prev,
-      queryKey: computed(() => [{ subsystem: 'trpc', path: `json.${resource}.list`, page: page.value, filters: {} }]),
+      queryKey: computed(() => [{ subsystem: 'trpc', path: `json.${resource}.list`, page: page.value, filters: {}, q: searchQuery.value, sort: sortField.value, order: sortOrder.value }]),
     },
   )
   const create = api.create.useMutation()
@@ -68,5 +71,15 @@ export function useResourceCrud(resource: ResourceName, opts?: { perPage?: numbe
     })
   }
 
-  return { list, create, update, handleCreate, handleUpdate, handleDelete, page, perPage }
+  function handleSearch(q: string) {
+    searchQuery.value = q || undefined
+    page.value = 1
+  }
+
+  function handleSort(field: string | undefined, order: 'asc' | 'desc') {
+    sortField.value = field
+    sortOrder.value = order
+  }
+
+  return { list, create, update, handleCreate, handleUpdate, handleDelete, handleSearch, handleSort, page, perPage }
 }
