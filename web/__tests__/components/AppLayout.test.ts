@@ -2,13 +2,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 import { RouterLinkStub } from '@vue/test-utils'
+import { reactive } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 
 vi.mock('@/lib/utils', () => ({
   cn: (...inputs: any[]) => inputs.filter(Boolean).join(' '),
 }))
 
-const mockRoute = { path: '/users' }
+const mockRoute = reactive({ path: '/users' })
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
   useRouter: () => ({ push: vi.fn() }),
@@ -92,5 +93,17 @@ describe('AppLayout.vue', () => {
     expect(toPaths).toContain('/users')
     expect(toPaths).toContain('/posts')
     expect(toPaths).toContain('/comments')
+  })
+
+  it('scrolls main content to top when route path changes', async () => {
+    const scrollTo = vi.fn()
+    Element.prototype.scrollTo = scrollTo
+
+    const wrapper = shallowMount(AppLayout, { global: globalOpts })
+
+    mockRoute.path = '/'
+    await wrapper.vm.$nextTick()
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'instant' })
   })
 })

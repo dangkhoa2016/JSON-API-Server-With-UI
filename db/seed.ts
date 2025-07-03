@@ -68,9 +68,7 @@ export async function seedDatabase(dbInstance: SeedDb) {
 }
 
 const isMainModule =
-  process.argv[1] &&
-  process.argv[1].includes("db/seed") &&
-  fileURLToPath(import.meta.url) === process.argv[1];
+  process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
 if (isMainModule) {
   const db = getDb();

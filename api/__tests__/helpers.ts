@@ -50,6 +50,17 @@ export async function setupTestDatabase() {
     title TEXT NOT NULL,
     completed INTEGER NOT NULL DEFAULT 0
   )`);
+
+  await db.run(sql`CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT NOT NULL DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'string',
+    label TEXT,
+    description TEXT,
+    "group" TEXT,
+    is_public INTEGER NOT NULL DEFAULT 0
+  )`);
 }
 
 export async function seedTestData() {

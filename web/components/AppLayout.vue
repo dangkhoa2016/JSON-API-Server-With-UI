@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   LayoutDashboard,
@@ -17,6 +17,14 @@ import {
 
 const route = useRoute()
 const sidebarOpen = ref(false)
+const mainRef = ref<HTMLElement | null>(null)
+
+watch(
+  () => route.path,
+  () => {
+    mainRef.value?.scrollTo({ top: 0, behavior: 'instant' })
+  },
+)
 
 function closeSidebar() {
   sidebarOpen.value = false
@@ -117,7 +125,7 @@ const navItems = [
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-auto">
+    <main ref="mainRef" class="flex-1 overflow-auto">
       <div class="p-6 pt-16 lg:pt-6 max-w-7xl mx-auto">
         <slot />
       </div>

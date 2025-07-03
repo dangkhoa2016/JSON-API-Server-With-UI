@@ -70,3 +70,18 @@ export const todos = sqliteTable("todos", {
 
 export type Todo = typeof todos.$inferSelect;
 export type InsertTodo = typeof todos.$inferInsert;
+
+// Settings table (admin-configurable settings from .env)
+export const settings = sqliteTable("settings", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull().default(""),
+  type: text("type").notNull().default("string"),
+  label: text("label"),
+  description: text("description"),
+  group: text("group"),
+  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
+});
+
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = typeof settings.$inferInsert;
