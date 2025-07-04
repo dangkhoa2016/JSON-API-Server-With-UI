@@ -1,38 +1,75 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
-
-const mockServe = vi.fn((_opts: unknown, cb: () => void) => {
-  cb();
-  return { stop: vi.fn() };
-});
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
+import fs from "fs";
 
 vi.mock("@hono/node-server", () => ({
-  serve: mockServe,
+  serve: vi.fn((_opts: Record<string, unknown>, callback?: () => void) => {
+    if (callback) callback();
+  }),
 }));
-
-const mockServeStaticFiles = vi.fn();
 
 vi.mock("../lib/vite", () => ({
-  serveStaticFiles: mockServeStaticFiles,
+  serveStaticFiles: vi.fn(),
 }));
 
-describe("server startup in production mode", () => {
-  beforeAll(() => {
-    process.env.NODE_ENV = "production";
+process.env.NODE_ENV = "production";
+
+describe("boot startup", () => {
+  describe("dist/public exists", () => {
+    let existsSyncSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeAll(async () => {
+      existsSyncSpy = vi.spyOn(fs, "existsSync").mockReturnValue(true);
+      await import("../boot");
+    });
+
+    afterAll(() => {
+      existsSyncSpy.mockRestore();
+    });
+
+    it("starts the server with fetch and port", async () => {
+      const { serve } = await import("@hono/node-server");
+      expect(serve).toHaveBeenCalled();
+      const serveCall = vi.mocked(serve).mock.calls[0][0];
+      expect(serveCall).toHaveProperty("fetch");
+      expect(serveCall).toHaveProperty("port");
+    });
+
+    it("calls serveStaticFiles when dist/public exists", async () => {
+      const { serveStaticFiles } = await import("../lib/vite");
+      expect(serveStaticFiles).toHaveBeenCalled();
+    });
+
+    it("exports the Hono app", async () => {
+      const { default: app } = await import("../boot");
+      expect(app).toBeDefined();
+      expect(typeof app.fetch).toBe("function");
+      expect(typeof app.request).toBe("function");
+    });
   });
 
-  afterAll(() => {
-    process.env.NODE_ENV = "test";
-  });
+  describe("dist/public missing", () => {
+    let existsSyncSpy: ReturnType<typeof vi.spyOn>;
 
-  it("starts HTTP server with serveStaticFiles when production", async () => {
-    const { default: app } = await import("../boot");
+    beforeEach(() => {
+      existsSyncSpy = vi.spyOn(fs, "existsSync").mockReturnValue(false);
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
 
-    expect(mockServe).toHaveBeenCalledTimes(1);
-    expect(mockServe).toHaveBeenCalledWith(
-      expect.objectContaining({ fetch: app.fetch, port: expect.any(Number) }),
-      expect.any(Function),
-    );
-    expect(mockServeStaticFiles).toHaveBeenCalledTimes(1);
-    expect(mockServeStaticFiles).toHaveBeenCalledWith(app);
+    afterEach(() => {
+      existsSyncSpy.mockRestore();
+    });
+
+    it("does not call serveStaticFiles when dist/public is missing", async () => {
+      await import("../boot");
+      const { serveStaticFiles } = await import("../lib/vite");
+      expect(serveStaticFiles).not.toHaveBeenCalled();
+    });
+
+    it("still starts the server when dist/public is missing", async () => {
+      await import("../boot");
+      const { serve } = await import("@hono/node-server");
+      expect(serve).toHaveBeenCalled();
+    });
   });
 });

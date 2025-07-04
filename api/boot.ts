@@ -10,22 +10,34 @@ import { rateLimitMiddleware } from "./lib/ratelimit";
 import { VALID_RESOURCES } from "./jsonServerRouter";
 import type { Context } from "hono";
 import { serveStaticFiles } from "./lib/vite";
+import { getDb } from "./queries/connection";
+import { sql } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
 
 type Resource = typeof VALID_RESOURCES[number];
 
+interface ResourceHandler {
+  list: (input: Record<string, unknown>) => Promise<unknown>;
+  getById: (input: { id: number }) => Promise<unknown>;
+  create: (input: unknown) => Promise<unknown>;
+  update: (input: { id: number; data: unknown }) => Promise<unknown>;
+  delete: (input: { id: number }) => Promise<boolean>;
+}
+
 function getJsonCaller(c: Context) {
   const caller = appRouter.createCaller({ req: c.req.raw, resHeaders: new Headers() });
-  const handlers: Record<Resource, (typeof caller.json)[Resource]> = {
-    users: caller.json.users,
-    posts: caller.json.posts,
-    comments: caller.json.comments,
-    albums: caller.json.albums,
-    photos: caller.json.photos,
-    todos: caller.json.todos,
+  const handlers: Record<Resource, ResourceHandler> = {
+    users: caller.json.users as unknown as ResourceHandler,
+    posts: caller.json.posts as unknown as ResourceHandler,
+    comments: caller.json.comments as unknown as ResourceHandler,
+    albums: caller.json.albums as unknown as ResourceHandler,
+    photos: caller.json.photos as unknown as ResourceHandler,
+    todos: caller.json.todos as unknown as ResourceHandler,
   };
   return {
     list: (resource: Resource, filters: Record<string, string>) =>
-      (handlers[resource] as any).list({
+      handlers[resource].list({
         filters,
         sort: filters._sort,
         order: filters._order,
@@ -33,10 +45,10 @@ function getJsonCaller(c: Context) {
         page: filters._page ? parseInt(filters._page) : undefined,
         q: filters.q,
       }),
-    getById: (resource: Resource, id: number) => (handlers[resource] as any).getById({ id }),
-    create: (resource: Resource, body: unknown) => (handlers[resource] as any).create(body),
-    update: (resource: Resource, id: number, body: unknown) => (handlers[resource] as any).update({ id, data: body }),
-    delete: (resource: Resource, id: number) => (handlers[resource] as any).delete({ id }),
+    getById: (resource: Resource, id: number) => handlers[resource].getById({ id }),
+    create: (resource: Resource, body: unknown) => handlers[resource].create(body),
+    update: (resource: Resource, id: number, body: unknown) => handlers[resource].update({ id, data: body }),
+    delete: (resource: Resource, id: number) => handlers[resource].delete({ id }),
   };
 }
 
@@ -59,6 +71,32 @@ app.use(async (c, next) => {
 
 // Rate limiting for all API routes
 app.use("/api/*", rateLimitMiddleware);
+
+// Health check
+const startTime = Date.now();
+
+app.get("/api/health", async (c) => {
+  try {
+    const db = getDb();
+    await db.run(sql`SELECT 1`);
+    return c.json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      db: "connected",
+    });
+  } catch {
+    return c.json(
+      {
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        db: "disconnected",
+      },
+      503,
+    );
+  }
+});
 
 // tRPC handler
 app.use("/api/trpc/*", async (c) => {
@@ -219,7 +257,9 @@ export default app;
 const isMainModule = process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").href;
 
 if (isMainModule || env.isProduction) {
-  env.isProduction && serveStaticFiles(app);
+  if (fs.existsSync(path.resolve(import.meta.dirname, "../dist/public"))) {
+    serveStaticFiles(app);
+  }
 
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
