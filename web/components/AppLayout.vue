@@ -9,6 +9,7 @@ import {
   Image,
   Images,
   CheckSquare,
+  Settings,
   Server,
   ExternalLink,
   Menu,
@@ -38,6 +39,7 @@ const navItems = [
   { path: '/albums', icon: Image, label: 'Albums' },
   { path: '/photos', icon: Images, label: 'Photos' },
   { path: '/todos', icon: CheckSquare, label: 'Todos' },
+  { path: '/admin/settings', icon: Settings, label: 'Settings' },
 ]
 </script>
 
