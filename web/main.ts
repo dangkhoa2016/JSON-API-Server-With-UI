@@ -1,12 +1,9 @@
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import { TRPCUntypedClient, httpBatchLink } from '@trpc/client'
-import superjson from 'superjson'
-import { trpc } from './providers/trpc'
+import { trpc, trpcClient } from './providers/trpc'
 import App from './App.vue'
 import './index.css'
-import type { AppRouter } from '../api/router'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,22 +18,7 @@ const queryClient = new QueryClient({
 const app = createApp(App)
 
 app.use(VueQueryPlugin, { queryClient })
-app.use(trpc, {
-  client: new TRPCUntypedClient<AppRouter>({
-    links: [
-      httpBatchLink({
-        url: '/api/trpc',
-        transformer: superjson,
-        fetch(input, init) {
-          return globalThis.fetch(input, {
-            ...(init ?? {}),
-            credentials: 'include',
-          })
-        },
-      }),
-    ],
-  }),
-})
+app.use(trpc, { client: trpcClient })
 
 const router = createRouter({
   history: createWebHistory(),
@@ -48,6 +30,7 @@ const router = createRouter({
     { path: '/albums', name: 'albums', component: () => import('./pages/Albums.vue') },
     { path: '/photos', name: 'photos', component: () => import('./pages/Photos.vue') },
     { path: '/todos', name: 'todos', component: () => import('./pages/Todos.vue') },
+    { path: '/admin/settings', name: 'admin-settings', component: () => import('./pages/Settings.vue') },
   ],
 })
 

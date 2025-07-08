@@ -9,6 +9,9 @@ const mockMutate = vi.fn((_data: any, options?: any) => {
 const mockRefetch = vi.fn()
 const mockListData = { value: { data: [] } }
 
+const defaultMutate = mockMutate
+let activeMutate: typeof mockMutate = defaultMutate
+
 const { toastSuccess, toastError } = vi.hoisted(() => ({ toastSuccess: vi.fn(), toastError: vi.fn() }))
 vi.mock('vue-sonner', () => ({ toast: { success: toastSuccess, error: toastError } }))
 
@@ -21,9 +24,9 @@ vi.mock('@/providers/trpc', () => ({
           void opts?.queryKey?.value
           return { data: mockListData, isLoading: { value: false }, refetch: mockRefetch }
         }},
-        create: { useMutation: () => ({ mutate: mockMutate, isPending: { value: false } }) },
-        update: { useMutation: () => ({ mutate: mockMutate, isPending: { value: false } }) },
-        delete: { useMutation: () => ({ mutate: mockMutate, isPending: { value: false } }) },
+        create: { useMutation: () => ({ mutate: (...args: any[]) => activeMutate(...args), isPending: { value: false } }) },
+        update: { useMutation: () => ({ mutate: (...args: any[]) => activeMutate(...args), isPending: { value: false } }) },
+        delete: { useMutation: () => ({ mutate: (...args: any[]) => activeMutate(...args), isPending: { value: false } }) },
       },
     },
   },
@@ -40,6 +43,7 @@ describe('Users.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockListData.value = { data: [] }
+    activeMutate = defaultMutate
   })
 
   it('renders ResourcePage', () => {
@@ -63,6 +67,69 @@ describe('Users.vue', () => {
     const wrapper = shallowMount(Users) as any
     wrapper.vm.handleDelete(5)
     expect(mockMutate).toHaveBeenCalled()
+  })
+
+  // ── onError callbacks (coverage lines 49, 61, 73-75) ──────────────
+
+  it('handleCreate shows error toast on mutation error', () => {
+    activeMutate = vi.fn((_data: any, opts?: any) => {
+      opts?.onError({ message: 'Create failed' })
+    })
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleCreate({ name: 'Test' })
+    expect(toastError).toHaveBeenCalledWith('Failed', { description: 'Create failed' })
+  })
+
+  it('handleUpdate shows error toast on mutation error', () => {
+    activeMutate = vi.fn((_data: any, opts?: any) => {
+      opts?.onError({ message: 'Update failed' })
+    })
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleUpdate(1, { name: 'Updated' })
+    expect(toastError).toHaveBeenCalledWith('Failed', { description: 'Update failed' })
+  })
+
+  it('handleDelete shows error toast on mutation error', () => {
+    activeMutate = vi.fn((_data: any, opts?: any) => {
+      opts?.onError({ message: 'Delete failed' })
+    })
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleDelete(5)
+    expect(toastError).toHaveBeenCalledWith('Failed', { description: 'Delete failed' })
+  })
+
+  // ── handleSearch (coverage lines 78-81) ──────────────────────────
+
+  it('handleSearch sets searchQuery and resets page', () => {
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.page = 3
+    wrapper.vm.handleSearch('test query')
+    expect(wrapper.vm.searchQuery).toBe('test query')
+    expect(wrapper.vm.page).toBe(1)
+  })
+
+  it('handleSearch clears searchQuery when empty string', () => {
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleSearch('')
+    expect(wrapper.vm.searchQuery).toBeUndefined()
+    expect(wrapper.vm.page).toBe(1)
+  })
+
+  // ── handleSort (coverage lines 83-86) ────────────────────────────
+
+  it('handleSort sets sortField and sortOrder', () => {
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleSort('name', 'desc')
+    expect(wrapper.vm.sortField).toBe('name')
+    expect(wrapper.vm.sortOrder).toBe('desc')
+  })
+
+  it('handleSort clears sortField when undefined', () => {
+    const wrapper = shallowMount(Users) as any
+    wrapper.vm.handleSort('name', 'desc')
+    wrapper.vm.handleSort(undefined, 'asc')
+    expect(wrapper.vm.sortField).toBeUndefined()
+    expect(wrapper.vm.sortOrder).toBe('asc')
   })
 
   it('formattedItems handles empty data', () => {
