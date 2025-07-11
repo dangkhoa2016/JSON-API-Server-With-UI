@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
+import type { AppRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
 import { rateLimitMiddleware } from "./lib/ratelimit";
@@ -25,8 +26,13 @@ interface ResourceHandler {
   delete: (input: { id: number }) => Promise<boolean>;
 }
 
-function getJsonCaller(c: Context) {
+function createJsonCaller(c: Context) {
   const caller = appRouter.createCaller({ req: c.req.raw, resHeaders: new Headers() });
+  return caller;
+}
+
+function getJsonCaller(c: Context) {
+  const caller = createJsonCaller(c);
   const handlers: Record<Resource, ResourceHandler> = {
     users: caller.json.users as unknown as ResourceHandler,
     posts: caller.json.posts as unknown as ResourceHandler,
@@ -57,13 +63,50 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 // Global middleware
 app.use(cors());
 
-// Reject requests with body larger than 50MB
+// Reject requests with body larger than 50MB.
+// Content-Length is checked first as a fast pre-check.
+// The actual body is then streamed through a TransformStream that validates
+// size chunk-by-chunk, catching clients that send misleading Content-Length.
 const MAX_BODY_SIZE = 50 * 1024 * 1024;
 app.use(async (c, next) => {
   if (["POST", "PUT", "PATCH"].includes(c.req.method)) {
     const len = parseInt(c.req.header("content-length") || "0", 10);
     if (len > MAX_BODY_SIZE) {
       return c.json({ error: "Request body too large" }, 413);
+    }
+    // Validate actual body size via streaming to catch misleading Content-Length
+    let totalBytes = 0;
+    let rejected = false;
+    const body = c.req.raw.body;
+    if (body) {
+      const reader = body.getReader();
+      const chunks: Uint8Array[] = [];
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalBytes += value.byteLength;
+          if (totalBytes > MAX_BODY_SIZE) {
+            rejected = true;
+            reader.cancel();
+            break;
+          }
+          chunks.push(value);
+        }
+      } catch {
+        // If body cannot be read (e.g., streaming), rely on Content-Length check above
+      }
+      if (rejected) {
+        return c.json({ error: "Request body too large" }, 413);
+      }
+      // Reconstruct the body for downstream handlers
+      const newBody = new Blob(chunks).stream();
+      c.req.raw = new Request(c.req.raw.url, {
+        method: c.req.raw.method,
+        headers: c.req.raw.headers,
+        body: newBody,
+        duplex: "half",
+      });
     }
   }
   await next();
@@ -110,8 +153,7 @@ app.use("/api/trpc/*", async (c) => {
 
 // Admin REST routes — thin HTTP adapter wrapping admin tRPC procedures
 function getAdminCaller(c: Context) {
-  const caller = appRouter.createCaller({ req: c.req.raw, resHeaders: new Headers() });
-  return caller.admin;
+  return createJsonCaller(c).admin;
 }
 
 async function adminCall(c: Context, fn: (admin: ReturnType<typeof getAdminCaller>) => Promise<Response>): Promise<Response> {
@@ -124,22 +166,25 @@ async function adminCall(c: Context, fn: (admin: ReturnType<typeof getAdminCalle
 }
 
 app.post("/api/admin/auth/login", async (c) => {
-  const admin = getAdminCaller(c);
-  const result = await admin.auth.login(await c.req.json());
-  return c.json(result);
+  return adminCall(c, async (admin) => {
+    const result = await admin.auth.login(await c.req.json());
+    return c.json(result);
+  });
 });
 
 app.get("/api/admin/settings", async (c) => {
-  const admin = getAdminCaller(c);
-  const result = await admin.settings.list();
-  return c.json(result);
+  return adminCall(c, async (admin) => {
+    const result = await admin.settings.list();
+    return c.json(result);
+  });
 });
 
 app.get("/api/admin/settings/:key", async (c) => {
-  const admin = getAdminCaller(c);
-  const result = await admin.settings.getByKey({ key: c.req.param("key") });
-  if (result === null) return c.json({ error: "Not found" }, 404);
-  return c.json(result);
+  return adminCall(c, async (admin) => {
+    const result = await admin.settings.getByKey({ key: c.req.param("key") });
+    if (result === null) return c.json({ error: "Not found" }, 404);
+    return c.json(result);
+  });
 });
 
 app.put("/api/admin/settings/:key", async (c) => {
@@ -177,13 +222,13 @@ function validateResource(resource: string): resource is Resource {
 }
 
 app.get("/api/counts", async (c) => {
-  const caller = appRouter.createCaller({ req: c.req.raw, resHeaders: new Headers() });
+  const caller = createJsonCaller(c);
   const result = await caller.json.getCounts();
   return c.json(result);
 });
 
 app.get("/api/feature-cards", async (c) => {
-  const caller = appRouter.createCaller({ req: c.req.raw, resHeaders: new Headers() });
+  const caller = createJsonCaller(c);
   const result = await caller.json.getFeatureCards();
   return c.json(result);
 });

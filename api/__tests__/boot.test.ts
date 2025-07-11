@@ -291,6 +291,18 @@ describe("REST API - /api/:resource", () => {
       const body = await res.json() as JsonBody;
       expect(body.error).toBe("Request body too large");
     });
+
+    it("returns 413 when actual body exceeds limit despite small Content-Length", async () => {
+      const largeBody = new Uint8Array(51 * 1024 * 1024);
+      const res = await app.request("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": "100" },
+        body: largeBody,
+      });
+      expect(res.status).toBe(413);
+      const body = await res.json() as JsonBody;
+      expect(body.error).toBe("Request body too large");
+    });
   });
 });
 
