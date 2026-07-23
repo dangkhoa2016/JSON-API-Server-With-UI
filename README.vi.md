@@ -272,6 +272,25 @@ Backend tests dùng SQLite trong bộ nhớ (`:memory:`) và nạp dữ liệu t
 
 ---
 
+## Đóng góp
+
+Vui lòng đọc [CONTRIBUTING.vi.md](CONTRIBUTING.vi.md) để biết chi tiết về các quy tắc thông báo commit và quy trình phát triển.
+
+### Bắt đầu nhanh
+
+```bash
+# Cài đặt dependencies
+yarn install
+
+# Chạy tests
+yarn test
+
+# Chạy linting
+yarn lint
+```
+
+---
+
 ## Production
 
 ```bash

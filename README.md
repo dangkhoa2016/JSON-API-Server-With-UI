@@ -271,6 +271,25 @@ Backend tests use an in-memory SQLite database and seed synthetic data per test.
 
 ---
 
+## Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our commit message conventions and development workflow.
+
+### Quick Start
+
+```bash
+# Install dependencies
+yarn install
+
+# Run tests
+yarn test
+
+# Run linting
+yarn lint
+```
+
+---
+
 ## Production
 
 ```bash
